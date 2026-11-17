@@ -1,0 +1,12 @@
+{
+  "name": "claude-theme",
+  "owner": { "name": "Quyen Chau" },
+  "description": "Animated vector wallpapers and color looks for the Claude desktop app.",
+  "plugins": [
+    {
+      "name": "live-wallpaper",
+      "source": "./",
+      "description": "Animated vector wallpapers for the Claude desktop and mobile apps. Switch with /wallpaper."
+    }
+  ]
+}
