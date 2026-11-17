@@ -1,94 +1,17 @@
-import type { EngineInterface, Register, ThemeSetArgs } from 'claude-code'
+import { atom, read, update } from 'claude-code'
+import type { EngineInterface, Register } from 'claude-code'
 
-import { makeColors } from './make-colors.js'
-import { buildCosmicScene } from './scene'
-import { buildFrostBladeScene } from './wallpapers/frost-blade'
-import { buildNightRainScene } from './wallpapers/night-rain'
-import { buildSakuraScene } from './wallpapers/sakura'
-import { buildZenLotusScene } from './wallpapers/zen-lotus'
+import type { GlassLevel, WallpaperSettings } from '../types'
+import { DEFAULTS, GLASS, NAMES, settingsFrom, WALLPAPERS } from './catalog'
 
-type Palette = Parameters<typeof makeColors>[0]
+const PANE = 'wallpaper'
+const STORE_KEY = 'settings'
+// Change the tag when WallpaperSettings' fields change: it declines what an
+// earlier version stored in this session's state.
+const settings = atom({ plugin: 'live-wallpaper', key: 'settings' } as const, DEFAULTS, { shape: 'settings-1' })
 
-type Wallpaper = {
-  svg: string
-  alt: string
-  look: ThemeSetArgs
-  problems: string[]
-}
-
-// A moving vector scene, with frosted panels over it.
-function scene(id: string, alt: string, svg: string, tint: string, palette: Palette): Wallpaper {
-  const { theme, problems } = makeColors(palette)
-
-  return {
-    svg,
-    alt,
-    problems,
-    look: { colors: theme, backdrop: { scene: id, glass: { blur: 18, tint, opacity: 0.58 } } },
-  }
-}
-
-// A dark look from a handful of colors.
-function dark(label: string, accent: string, pro: string, gray: [string, string, string, string, string, string, string]): Palette {
-  const [s0, s1, s2, s3, tp, ts, tm] = gray
-
-  return {
-    label,
-    only: 'dark',
-    roles: { accent, pro, danger: '#f27d8a', success: '#78d6aa', warning: '#f3c46c' },
-    dark: {
-      gray: {
-        anchors: {
-          'surface-0': s0,
-          'surface-1': s1,
-          'surface-2': s2,
-          'surface-3': s3,
-          'text-primary': tp,
-          'text-secondary': ts,
-          'text-muted': tm,
-        },
-      },
-    },
-  }
-}
-
-const COSMIC = dark('Cosmic Violet', '#a98bff', '#d59cf5', ['#0b0a1c', '#121029', '#181533', '#1d1a3b', '#f2ecff', '#cfc6ea', '#a79fca'])
-const NIGHT_RAIN = dark('Night Rain', '#6fa8ff', '#b89cff', ['#0a1428', '#0f1b33', '#14213d', '#192746', '#eef4ff', '#c6d3ea', '#9eb0cf'])
-const SAKURA = dark('Sakura Dusk', '#c58bff', '#ff9ad5', ['#140c24', '#1b1230', '#22173b', '#281b44', '#f8eefc', '#dccbe8', '#b7a3c9'])
-const FROST = dark('Frost Blade', '#7cc4ff', '#d77ad6', ['#070d1f', '#0c1530', '#111c3b', '#152245', '#eef6ff', '#c5d6ef', '#9db1d3'])
-const ZEN: Palette = {
-  label: 'Zen Lotus',
-  only: 'light',
-  roles: { accent: '#3f7f62', pro: '#7a5aa8', danger: '#b8423a', success: '#4e8a4f', warning: '#a8711a' },
-  light: {
-    gray: {
-      anchors: {
-        'surface-0': '#e6ede1',
-        'surface-1': '#eef3ea',
-        'surface-2': '#f6f9f3',
-        'surface-3': '#f6f9f3',
-        'text-primary': '#1f2a22',
-        'text-secondary': '#3f4d42',
-        'text-muted': '#56655a',
-      },
-    },
-  },
-}
-
-const WALLPAPERS: Record<string, Wallpaper> = {
-  cosmic: scene('cosmic', 'A slowly drifting violet and gold nebula with twinkling stars', buildCosmicScene(), '#0b0a1c', COSMIC),
-  'night-rain': scene('night-rain', 'Rain falling past a night city window, a laptop glowing warm on the desk', buildNightRainScene(), '#0a1428', NIGHT_RAIN),
-  sakura: scene('sakura', 'Pink and lilac petals tumbling past a glassy folding fan at violet dusk', buildSakuraScene(), '#160d29', SAKURA),
-  'zen-lotus': scene('zen-lotus', 'Lotus flowers on a misty bright pond with motes of light drifting upward', buildZenLotusScene(), '#f3f7ef', ZEN),
-  'frost-blade': scene('frost-blade', 'Snowflakes turning in a deep blue night as an icy blade of light flashes across', buildFrostBladeScene(), '#070d1f', FROST),
-}
-
-const NAMES = Object.keys(WALLPAPERS)
-const DEFAULT = 'night-rain'
-const KEY = 'wallpaper'
-
-async function wear($: EngineInterface, name: string) {
-  const wp = WALLPAPERS[name]
+async function wear($: EngineInterface, s: WallpaperSettings) {
+  const wp = WALLPAPERS[s.scene]
 
   if (wp === undefined) {
     return
@@ -96,23 +19,36 @@ async function wear($: EngineInterface, name: string) {
   const unpainted = wp.problems.find(line => line.startsWith("Desktop won't paint"))
 
   if (unpainted !== undefined) {
-    $.ui.toast(`${name}: ${unpainted}`)
+    $.ui.toast(`${s.scene}: ${unpainted}`)
   }
-  const set = await $.theme.set(wp.look)
+  const glass = GLASS[s.glass]
+  const set = await $.theme.set({
+    colors: wp.colors,
+    backdrop: { scene: s.scene, glass: { blur: glass.blur, tint: wp.tint, opacity: glass.opacity } },
+  })
 
   if (!set.isDrawn) {
     $.ui.status(set.reason)
   }
 }
 
+// One place every change goes through: this session's state (redraws the
+// pane and the backdrop), the store (the next session), and the theme.
+async function apply($: EngineInterface, next: WallpaperSettings) {
+  await update($, settings, () => next)
+  await $.store.set(STORE_KEY, next)
+  await wear($, next)
+}
+
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     await $.command.register({
       name: 'wallpaper',
-      description: `Switch the wallpaper: ${NAMES.join(', ')}`,
+      description: `Open the Wallpaper pane, or switch straight to one: ${NAMES.join(', ')}`,
     })
-    const saved = await $.store.get(KEY)
-    await wear($, typeof saved === 'string' && saved in WALLPAPERS ? saved : DEFAULT)
+    const saved = settingsFrom(await $.store.get(STORE_KEY))
+    await update($, settings, () => saved)
+    await wear($, saved)
 
     return next(e)
   })
@@ -121,20 +57,75 @@ export const register: Register = on => {
     const name = e.args.trim()
 
     if (name === '') {
-      const saved = await $.store.get(KEY)
+      const { isPlaced } = await $.ui.open({ id: PANE, title: 'Wallpaper' })
 
-      return { text: `Wallpapers: ${NAMES.join(', ')}. Wearing: ${typeof saved === 'string' ? saved : DEFAULT}. Use /wallpaper <name>.` }
+      return { text: isPlaced ? 'Wallpaper pane opened.' : `Wallpapers: ${NAMES.join(', ')}. Use /wallpaper <name>.` }
     }
     if (!(name in WALLPAPERS)) {
       return { text: `No wallpaper "${name}". Choose one of: ${NAMES.join(', ')}.` }
     }
-    await $.store.set(KEY, name)
-    await wear($, name)
+    await apply($, { ...(await read($, settings)), scene: name })
 
     return { text: `Wallpaper: ${name}.` }
   })
 
-  on('ui.render', { component: 'Backdrop' }, ($, e, next) => {
+  on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
+    const els = $.ui.resolve(e)
+    const { Box, Text, Button, Select } = els
+    // Svg is on desktop and mobile; the terminal shows the cards without pictures.
+    const Svg = 'Svg' in els ? els.Svg : undefined
+    const s = await read($, settings)
+
+    return (
+      <Box flexDirection="column" gap={1}>
+        <Text bold>Scene</Text>
+        <Box flexDirection="row" flexWrap="wrap" gap={1}>
+          {NAMES.map(name => {
+            const wp = WALLPAPERS[name]
+
+            if (wp === undefined) {
+              return null
+            }
+            const isOn = name === s.scene
+
+            return (
+              <Box key={`card-${name}`} flexDirection="column" gap={1} padding={1} borderStyle="round" borderColor={isOn ? 'claude' : 'subtle'}>
+                {Svg !== undefined && <Svg source={wp.still} alt={wp.alt} width={208} height={117} />}
+                <Button
+                  key={`pick-${name}`}
+                  label={isOn ? `${wp.label} ✓` : wp.label}
+                  variant={isOn ? 'primary' : 'secondary'}
+                  onPress={() => void apply($, { ...s, scene: name })}
+                />
+              </Box>
+            )
+          })}
+        </Box>
+        <Select
+          key="glass"
+          label="Glass"
+          options={(Object.keys(GLASS) as GlassLevel[]).map(level => ({ value: level, label: GLASS[level].label }))}
+          value={s.glass}
+          onSelect={value => void apply($, { ...s, glass: value as GlassLevel })}
+        />
+        <Select
+          key="motion"
+          label="Motion"
+          options={[
+            { value: 'on', label: 'On' },
+            { value: 'off', label: 'Off' },
+          ]}
+          value={s.motion ? 'on' : 'off'}
+          onSelect={value => void apply($, { ...s, motion: value === 'on' })}
+        />
+        <Box flexDirection="row" gap={1}>
+          <Button key="reset" label="Reset" dimColor onPress={() => void apply($, DEFAULTS)} />
+        </Box>
+      </Box>
+    )
+  })
+
+  on('ui.render', { component: 'Backdrop' }, async ($, e, next) => {
     if (e.surface !== 'desktop' && e.surface !== 'mobile') {
       return next(e)
     }
@@ -144,7 +135,8 @@ export const register: Register = on => {
       return next(e)
     }
     const { Svg } = $.ui.resolve(e)
+    const { motion } = await read($, settings)
 
-    return <Svg source={wp.svg} alt={wp.alt} isInteractive />
+    return <Svg source={motion ? wp.svg : wp.still} alt={wp.alt} isInteractive={motion ? true : undefined} />
   })
 }

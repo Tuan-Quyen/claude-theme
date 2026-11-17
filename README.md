@@ -43,10 +43,23 @@ claude plugin install live-wallpaper@claude-theme
 Type in the message box (not in a shell):
 
 ```
+/wallpaper
+```
+
+This opens the **Wallpaper pane** beside the chat:
+
+- **Scene**: a card per wallpaper with a preview; press one to wear it.
+- **Glass**: how much the panels frost over the wallpaper (Clear, Soft, Frosted, Solid). Solid is the easiest to read on.
+- **Motion**: Off stops every animation.
+- **Reset**: back to Night Rain, Frosted, motion on.
+
+To switch without the pane, name the wallpaper:
+
+```
 /wallpaper sakura
 ```
 
-`/wallpaper` with no name lists the wallpapers. The choice is remembered across sessions.
+Every choice is remembered across sessions.
 
 ## Notes
 
@@ -66,6 +79,12 @@ Check it:
 
 ```bash
 claude plugin validate .
+```
+
+Test it:
+
+```bash
+claude plugin test .
 ```
 
 `hooks/make-colors.js` is copied unchanged from Claude Code's plugin-authoring skill; re-copy it when Claude Code updates.

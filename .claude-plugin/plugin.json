@@ -1,8 +1,16 @@
 {
   "name": "live-wallpaper",
-  "version": "0.2.0",
-  "description": "Animated vector wallpapers for the Claude desktop and mobile apps: night rain, sakura, zen lotus, frost blade and cosmic. Switch with /wallpaper.",
-  "author": { "name": "Quyen Chau" },
+  "version": "0.3.0",
+  "description": "Animated vector wallpapers for the Claude desktop and mobile apps, with a Wallpaper pane to pick a scene, glass and motion. Open it with /wallpaper.",
+  "author": {
+    "name": "Quyen Chau"
+  },
   "license": "MIT",
-  "keywords": ["theme", "wallpaper", "backdrop", "desktop"]
+  "keywords": [
+    "theme",
+    "wallpaper",
+    "backdrop",
+    "desktop"
+  ],
+  "types": "./types/index.d.ts"
 }
